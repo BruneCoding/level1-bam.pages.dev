@@ -1,0 +1,356 @@
+<script>
+  alert(
+  "This game is still under development. For now, Bam is shooting the american heads which are in red. Models will come in soon. PS: u can scroll horizontally."
+);
+document.addEventListener("DOMContentLoaded", (event) => {
+  var player = document.querySelector(".player");
+  var gun = document.querySelector(".gun");
+  var gameContainer = document.querySelector(".game-container");
+  var ground = document.querySelector(".ground");
+  var platforms = document.querySelectorAll(".platform");
+  var enemy = document.querySelector(".enemy"); // New: Selecting the enemy
+  var scoreDisplay = document.getElementById("score"); // New: Display for score
+
+  var playerSpeed = 2; // Base speed
+  var maxSpeed = 7.5; // Max speed
+  var acceleration = 2; // Acceleration
+  var deceleration = 0.005; // Deceleration
+  var gravity = 0.5; // Gravity force
+  var jumpPower = 10; // Initial jump power
+  var speed = 0; // Current horizontal speed
+  var verticalSpeed = 0; // Current vertical speed
+  var isJumping = false; // Jump state
+  var keyPressed = {}; // Object to keep track of pressed keys
+  var gameScrollSpeed = 5; // Speed at which the game scrolls
+  var bullets = [];
+  var canShoot = true; // Flag to control shooting delay
+  var score = 0; // Score counter
+
+  function checkCollision(rect1, rect2) {
+    return (
+      rect1.left < rect2.right &&
+      rect1.right > rect2.left &&
+      rect1.top < rect2.bottom &&
+      rect1.bottom > rect2.top
+    );
+  }
+
+  function movePlayerHorizontally() {
+    var playerPos = player.offsetLeft;
+    if (keyPressed["D"] || keyPressed["d"]) {
+      speed = Math.min(speed + acceleration, maxSpeed);
+      player.style.left = playerPos + speed + "px";
+
+      // Scroll the game container
+      if (playerPos > window.innerWidth / 2) {
+        gameContainer.scrollLeft += gameScrollSpeed;
+      }
+    } else if (keyPressed["A"] || keyPressed["a"]) {
+      speed = Math.min(speed + acceleration, maxSpeed);
+      player.style.left = playerPos - speed + "px";
+
+      // Scroll the game container
+      if (gameContainer.scrollLeft > 0) {
+        gameContainer.scrollLeft -= gameScrollSpeed;
+      }
+    } else {
+      speed = Math.max(speed - deceleration, 0);
+    }
+    requestAnimationFrame(movePlayerHorizontally);
+  }
+
+  function movePlayerVertically() {
+    var playerRect = player.getBoundingClientRect();
+    var groundRect = ground.getBoundingClientRect();
+    var onGround = playerRect.bottom >= groundRect.top;
+
+    if (!onGround) {
+      verticalSpeed += gravity;
+    } else {
+      verticalSpeed = 0;
+      player.style.top = groundRect.top - playerRect.height + "px";
+    }
+
+    platforms.forEach((platform) => {
+      var platformRect = platform.getBoundingClientRect();
+      var collision = checkCollision(playerRect, platformRect);
+      if (collision && verticalSpeed >= 0) {
+        verticalSpeed = 0;
+        player.style.top = platformRect.top - playerRect.height + "px";
+      }
+    });
+
+    if (isJumping && onGround) {
+      verticalSpeed = -jumpPower;
+      isJumping = false;
+    }
+
+    player.style.top = player.offsetTop + verticalSpeed + "px";
+    requestAnimationFrame(movePlayerVertically);
+  }
+
+  // Handle gun rotation
+  document.addEventListener("mousemove", function (event) {
+    var playerRect = player.getBoundingClientRect();
+    var centerX = playerRect.left + playerRect.width / 2;
+    var centerY = playerRect.top + playerRect.height / 2;
+
+    var angle = Math.atan2(event.clientY - centerY, event.clientX - centerX);
+    var angleDeg = angle * (180 / Math.PI);
+
+    // Limiting the rotation angle between -90 and 90 degrees
+    if (angleDeg > 90) {
+      angleDeg = 90;
+    } else if (angleDeg < -90) {
+      angleDeg = -90;
+    }
+
+    gun.style.transform = `rotate(${angleDeg}deg)`;
+  });
+
+  // Handle shooting
+  document.addEventListener("click", function (event) {
+    if (canShoot) {
+      var playerRect = player.getBoundingClientRect();
+      var centerX = playerRect.left + playerRect.width / 2;
+      var centerY = playerRect.top + playerRect.height / 2;
+
+      var angle = Math.atan2(event.clientY - centerY, event.clientX - centerX);
+      var bullet = document.createElement("div");
+      bullet.className = "bullet";
+      bullet.style.position = "absolute";
+      bullet.style.width = "35px";
+      bullet.style.height = "14px";
+      bullet.style.backgroundImage = "url('https://i.imgur.com/5BSL6Ez.png')";
+      bullet.style.backgroundSize = "35px";
+      bullet.style.left = centerX + "px";
+      bullet.style.top = centerY + "px";
+
+      bullets.push({
+        element: bullet,
+        angle: angle,
+        isPlayerBullet: true // Flag to differentiate player and enemy bullets
+      });
+
+      gameContainer.appendChild(bullet);
+      canShoot = false;
+      setTimeout(function () {
+        canShoot = true;
+      }, 500); // 0.5 second delay (500 milliseconds)
+    }
+  });
+
+  function updateBullets() {
+    bullets.forEach((bullet, index) => {
+      var speed = 10;
+      bullet.element.style.left =
+        bullet.element.offsetLeft + Math.cos(bullet.angle) * speed + "px";
+      bullet.element.style.top =
+        bullet.element.offsetTop + Math.sin(bullet.angle) * speed + "px";
+
+      // Check collision with enemy
+      if (bullet.isPlayerBullet) {
+        var enemyRect = enemy.getBoundingClientRect();
+        if (checkCollision(bullet.element.getBoundingClientRect(), enemyRect)) {
+          // Hit the enemy
+          bullet.element.remove();
+          bullets.splice(index, 1);
+          // Handle enemy hit
+          handleEnemyHit();
+        }
+      }
+
+      // Remove bullet if it goes out of bounds
+      if (
+        bullet.element.offsetLeft < 0 ||
+        bullet.element.offsetLeft > gameContainer.offsetWidth ||
+        bullet.element.offsetTop < 0 ||
+        bullet.element.offsetTop > gameContainer.offsetHeight
+      ) {
+        bullet.element.remove();
+        bullets.splice(index, 1);
+      }
+    });
+    requestAnimationFrame(updateBullets);
+  }
+
+  function handleEnemyHit() {
+    // Increase score
+    score++;
+    scoreDisplay.innerText = score; // Update score display
+    // Remove enemy (example: hide or animate)
+    enemy.style.display = "none"; // Example: hide the enemy
+  }
+
+  // Handle key down events
+  document.addEventListener("keydown", function (event) {
+    keyPressed[event.key] = true;
+    if (event.key === " ") {
+      isJumping = true;
+    }
+  });
+
+  // Handle key up events
+  document.addEventListener("keyup", function (event) {
+    keyPressed[event.key] = false;
+  });
+  function handleEnemyHit() {
+    // Increase score
+    score++;
+    scoreDisplay.innerText = score; // Update score display
+
+    // Remove enemy (example: hide or animate)
+    enemy.style.display = "none"; // Example: hide the enemy
+
+    // Respawn a new enemy in a random position within gameContainer
+    respawnEnemy();
+  }
+
+  function respawnEnemy() {
+    // Remove existing enemy
+    enemy.remove();
+
+    // Create a new enemy element
+    var newEnemy = document.createElement("div");
+    newEnemy.className = "enemy";
+    newEnemy.style.width = "50px";
+    newEnemy.style.height = "50px";
+    newEnemy.style.backgroundColor = "red"; // Example background color or image
+
+    // Calculate random position within gameContainer
+    var maxX = gameContainer.offsetWidth - parseInt(newEnemy.style.width);
+    var maxY = gameContainer.offsetHeight - parseInt(newEnemy.style.height);
+    var randomX = Math.floor(Math.random() * maxX);
+    var randomY = Math.floor(Math.random() * maxY);
+
+    newEnemy.style.position = "absolute";
+    newEnemy.style.left = randomX + "px";
+    newEnemy.style.top = randomY + "px";
+
+    // Append the new enemy to gameContainer
+    gameContainer.appendChild(newEnemy);
+
+    // Update the reference to the new enemy
+    enemy = newEnemy;
+  }
+
+  document.addEventListener("keydown", function (event) {
+    var player = document.querySelector(".player");
+    if (event.key === "A" || event.key === "a") {
+      player.style.backgroundImage = "url('https://i.imgur.com/weZxZ2c.png')";
+    }
+    if (event.key === "D" || event.key === "d") {
+      player.style.backgroundImage = "url('https://i.imgur.com/gjA4q9q.png')";
+    }
+  });
+
+  movePlayerHorizontally();
+  movePlayerVertically();
+  updateBullets();
+});
+
+</script>
+<html>
+  <div class="game-container">
+  <div class="player"></div>
+  <div class="ground"></div>
+  <!-- Existing platforms -->
+  <div class="platform" style="bottom: 245px; left: 200px;"></div>
+  <div class="platform" style="bottom: 320px; left: 700px;"></div>
+  <div class="platform" style="bottom: 400px; left: 900px;"></div>
+  <div class="platform" style="bottom: 250px; left: 1200px;"></div>
+  <div class="platform" style="bottom: 350px; left: 1500px;"></div>
+  <!-- New enemy element -->
+  <div class="enemy"></div>
+</div>
+<div id="score">0</div>
+
+<style>
+  .platform {
+    display: none
+  }
+
+  #score {
+    color: black;
+    position: fixed;
+    z-index: 9;
+    scale: 2;
+    top: 10px;
+    right: 10px;
+    padding: 16px;
+    background: yellow;
+    border-radius: 15px;
+  }
+
+  .gun {
+    width: 50px;
+    height: 50px;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform-origin: center left;
+    background-image: url('https://i.imgur.com/7kDjpFl.png');
+    background-size: 50px;
+    transform: scaleX(-1);
+  }
+
+  .bullet {
+    scale: 0.5;
+  }
+
+  .player {
+    width: 100px;
+    height: 100px;
+    background-image: url("https://i.imgur.com/iosuG3C.png");
+    background-size: 100px;
+    position: absolute;
+    margin-bottom: -6px !important;
+  }
+
+  .enemy {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 10px solid red;
+    background: red;
+  }
+
+  body {
+    margin: 0;
+  }
+
+  .game-container {
+    position: relative;
+    width: 2000px;
+    /* Extended width for scrolling */
+    height: 100vh;
+    background-color: #f0f0f0;
+    overflow: hidden;
+  }
+
+  .ground,
+  .platform {
+    position: absolute;
+    background-color: #654321;
+    /* Dark brown color */
+    background-image: linear-gradient(#654321, #3b1f0b);
+    /* Gradient for depth */
+    border-top: 5px solid #43210f;
+    /* Top border to add dimension */
+    box-shadow: inset 0 5px 10px rgba(0, 0, 0, 0.5);
+    /* Inner shadow for texture */
+  }
+
+  .ground {
+    left: 0;
+    bottom: 0;
+    width: 2000px;
+    height: 100px;
+  }
+
+  .platform {
+    width: 200px;
+    height: 20px;
+  }
+</style>
+</html>
